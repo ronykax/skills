@@ -1,6 +1,6 @@
 ---
 name: shadcn-theme
-description: Generate complete, production-ready shadcn/ui color themes as reasoned OKLCH CSS custom properties for both light and dark modes. Use this skill whenever a user asks for a shadcn theme, palette or token redesign, dark-mode color system, brand-to-shadcn conversion, or “theme it like X,” even when they do not explicitly mention OKLCH. Resolve the project’s actual token inventory when available; otherwise use the built-in complete shadcn set. Preview by default and edit CSS only on an explicit apply or install request.
+description: Generate shadcn/ui OKLCH color themes for light and dark mode. Use when the user asks for a shadcn theme, palette, or color system.
 compatibility: Works standalone with CSS-variable shadcn/ui projects. Python 3 is optional for the two bundled scripts (`coloraide` + `tinycss2`; see scripts/requirements.txt).
 ---
 
