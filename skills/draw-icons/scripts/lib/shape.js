@@ -1,4 +1,4 @@
-import { fmt } from './geom.mjs';
+import { fmt } from './geom.js';
 
 // Squircle corner, measured from Hugeicons' path data. For corner P with tangent length t,
 // u = back along the incoming edge, v = along the outgoing edge:

@@ -1,13 +1,14 @@
-import { SHAPES, allowedAttrs, elementSubpaths, role } from './svg.mjs';
-import { flatten, polylineDistance, selfNarrowest, tangentAt, pointInPolygons, segLength, distToPolyline } from './geom.mjs';
-import { DETAIL_BUDGET } from './config.mjs';
+import { SHAPES, allowedAttrs, elementSubpaths, role } from './svg.js';
+import { flatten, polylineDistance, selfNarrowest, tangentAt, pointInPolygons, segLength, distToPolyline } from './geom.js';
+import { DETAIL_BUDGET, STYLES } from './config.js';
+import { styleOf } from './compile.js';
 
 const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 export function lintIcon(src, cfg, { kind = 'icon', detailOverride } = {}) {
-  const dna = cfg.dna, adj = cfg.adjustable;
+  const dna = cfg.dna;
   const G = dna.grid, pad = dna.padding;
-  const sDef = adj.stroke.default, sMax = adj.stroke.max;
+  const stroke = dna.stroke;
   const out = [];
   const add = (rule, level, message, at) => out.push({ rule, level, message, at });
   const xy = (p) => (p ? `(${p[0].toFixed(2)}, ${p[1].toFixed(2)})` : '');
@@ -17,19 +18,20 @@ export function lintIcon(src, cfg, { kind = 'icon', detailOverride } = {}) {
   const vb = (src.root.viewBox || '').trim().split(/[\s,]+/).map(Number);
   if (vb.length !== 4 || vb[0] !== 0 || vb[1] !== 0 || vb[2] !== G || vb[3] !== G) add('viewbox', 'error', `viewBox must be "0 0 ${G} ${G}" (got "${src.root.viewBox || ''}")`);
   for (const k of Object.keys(src.root)) {
-    if (!['xmlns', 'viewBox', 'width', 'height', 'xmlns:xlink', 'data-aliases'].includes(k) && !k.startsWith('data-waive-')) add('attribute', 'error', `<svg> must not set "${k}" — stroke, fill, caps and joins are applied when compiling`);
+    if (!['xmlns', 'viewBox', 'width', 'height', 'xmlns:xlink', 'data-aliases', 'data-style'].includes(k) && !k.startsWith('data-waive-')) add('attribute', 'error', `<svg> must not set "${k}" — stroke, fill, caps and joins are applied when compiling`);
   }
+
+  const style = styleOf(src, dna);
+  if (!STYLES.includes(style)) add('attribute', 'error', `data-style="${style}" must be one of ${STYLES.join(', ')}`);
 
   for (const t of src.others) add('element', 'error', `<${t}> is not allowed; use only ${SHAPES.join(', ')} with no groups`);
   if (!src.elements.length) { add('element', 'error', 'icon is empty'); return out; }
   src.elements.forEach((el, i) => {
     if (el.depth > 0) add('element', 'error', `element ${i + 1} (<${el.tag}>) is nested inside <${el.parents.join('> <')}>; keep the file flat`);
     const ok = allowedAttrs(el.tag);
-    for (const k of Object.keys(el.attrs)) if (!ok.includes(k)) add('attribute', 'error', `<${el.tag}> element ${i + 1}: attribute "${k}" is not allowed (geometry + data-role/data-only only)`);
+    for (const k of Object.keys(el.attrs)) if (!ok.includes(k)) add('attribute', 'error', `<${el.tag}> element ${i + 1}: attribute "${k}" is not allowed (geometry + data-role only)`);
     const r = el.attrs['data-role'];
     if (r !== undefined && !['silhouette', 'detail'].includes(r)) add('role', 'error', `element ${i + 1}: data-role="${r}" must be "silhouette" or "detail" (or absent for a normal stroke)`);
-    const o = el.attrs['data-only'];
-    if (o !== undefined && !['filled', 'outline'].includes(o)) add('role', 'error', `element ${i + 1}: data-only="${o}" must be "filled" or "outline"`);
     for (const [k, v] of Object.entries(el.attrs)) {
       if (k.startsWith('data-')) continue;
       const decimals = (v.match(/\.(\d+)/g) || []).map((s) => s.length - 1);
@@ -42,30 +44,24 @@ export function lintIcon(src, cfg, { kind = 'icon', detailOverride } = {}) {
   src.elements.forEach((el, idx) => {
     let subs;
     try { subs = elementSubpaths(el); } catch (e) { add('path', 'error', `element ${idx + 1}: ${e.message}`); return; }
-    for (const sub of subs) pieces.push({ el, idx, role: role(el), only: el.attrs['data-only'] || null, sub, pts: flatten(sub, 0.2) });
+    for (const sub of subs) pieces.push({ el, idx, role: role(el), sub, pts: flatten(sub, 0.2) });
   });
-  // a filled-only detail is a cut, not ink: it can't clip, clog or add detail
-  const cutOnly = (p) => p.role === 'detail' && p.only === 'filled';
-  const strokes = pieces.filter((p) => p.role !== 'silhouette' && !cutOnly(p));
+  const strokes = pieces.filter((p) => p.role !== 'silhouette');
   const sils = pieces.filter((p) => p.role === 'silhouette');
   const details = pieces.filter((p) => p.role === 'detail');
 
-  const styles = cfg.adjustable.styles;
-  const needsSil = styles.includes('duotone') || styles.includes('filled');
-  if (needsSil && kind === 'icon' && !sils.length) add('silhouette-missing', 'warn', `styles ${styles.join('/')} are enabled but there is no data-role="silhouette" shape, so duotone/filled will look like the default style. Fine for line-only glyphs (chevrons, arrows, plus); otherwise add one`);
+  if (style !== 'outline' && kind === 'icon' && !sils.length) add('silhouette-missing', 'warn', `a ${style} icon without a data-role="silhouette" shape comes out as plain outline. Fine for line-only glyphs (chevrons, arrows, plus); otherwise add one`);
   for (const p of sils) {
     const closedShape = ['circle', 'ellipse', 'rect', 'polygon'].includes(p.el.tag) || p.sub.closed;
     if (!closedShape) add('silhouette-open', 'error', `silhouette element ${p.idx + 1} is not closed (end the subpath with Z)`);
   }
-  if (!sils.length && !needsSil && kind === 'icon') add('silhouette-missing', 'info', 'no silhouette: fine while only the default style is enabled, but duotone/filled cannot be turned on later without one');
 
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const p of strokes) for (const q of p.pts) { minX = Math.min(minX, q.x); minY = Math.min(minY, q.y); maxX = Math.max(maxX, q.x); maxY = Math.max(maxY, q.y); }
   if (strokes.length) {
-    const edgeMax = Math.min(minX, minY, G - maxX, G - maxY) - sMax / 2;
-    const edgeDef = Math.min(minX, minY, G - maxX, G - maxY) - sDef / 2;
-    if (edgeMax < -0.01) add('clipped', 'error', `strokes get clipped by the canvas edge at max stroke ${sMax} (ink reaches ${edgeMax.toFixed(2)})`);
-    else if (edgeDef < pad - 0.01) add('padding', 'warn', `ink comes within ${edgeDef.toFixed(2)} of the edge at the default stroke; padding is ${pad}`);
+    const edge = Math.min(minX, minY, G - maxX, G - maxY) - stroke / 2;
+    if (edge < -0.01) add('clipped', 'error', `strokes get clipped by the canvas edge (ink reaches ${edge.toFixed(2)})`);
+    else if (edge < pad - 0.01) add('padding', 'warn', `ink comes within ${edge.toFixed(2)} of the edge; padding is ${pad}`);
     const w = maxX - minX, h = maxY - minY;
     const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
     if (Math.abs(cx - G / 2) > 1.5 || Math.abs(cy - G / 2) > 1.5) add('centered', 'info', `centre of the drawing is at ${xy([cx, cy])}; check it looks optically centred`);
@@ -74,40 +70,38 @@ export function lintIcon(src, cfg, { kind = 'icon', detailOverride } = {}) {
     if (k.circle && biggest < k.circle * 0.55 && kind === 'icon') add('small', 'warn', `drawing is only ${biggest.toFixed(1)} units across; most icons should fill the keylines (${k.square}–${k.circle})`);
   }
 
-  const need = sMax + dna.minGap;
-  const hard = sDef + dna.minGap / 2;
-  const TOUCH = Math.max(0.05, adj.stroke.min / 2); // closer than this, ink overlaps even at the thinnest stroke
+  const need = stroke + dna.minGap;
+  const hard = stroke + dna.minGap / 2;
+  const TOUCH = Math.max(0.05, stroke / 2); // closer than this, the ink overlaps
   for (let i = 0; i < strokes.length; i++) {
     for (let j = i + 1; j < strokes.length; j++) {
-      const oi = strokes[i].only, oj = strokes[j].only;
-      if (oi && oj && oi !== oj) continue; // never drawn together
       const { d, at } = polylineDistance(strokes[i].pts, strokes[j].pts);
       if (d <= TOUCH) {
         // joined on purpose, but the wedge next to the joint can still clog further out
         const w = wedge(strokes[i].pts, strokes[j].pts, TOUCH, need) || wedge(strokes[j].pts, strokes[i].pts, TOUCH, need);
-        if (w) add('gap', 'warn', `elements ${strokes[i].idx + 1} and ${strokes[j].idx + 1} touch, but further from the joint, near ${xy(w.at)}, they run only ${w.d.toFixed(2)} apart (want ≥ ${need}); the wedge between them fills in at heavier strokes`, w.at);
+        if (w) add('gap', 'warn', `elements ${strokes[i].idx + 1} and ${strokes[j].idx + 1} touch, but further from the joint, near ${xy(w.at)}, they run only ${w.d.toFixed(2)} apart (want ≥ ${need}); the wedge between them fills in`, w.at);
         continue;
       }
       const label = `elements ${strokes[i].idx + 1} and ${strokes[j].idx + 1}`;
-      if (d < hard) add('gap', 'error', `${label} are ${d.toFixed(2)} apart near ${xy(at)}; they look fused. Separate elements need ≥ ${need} between centrelines (max stroke ${sMax} + gap ${dna.minGap}), or should actually touch`, at);
-      else if (d < need - 0.01) add('gap', 'warn', `${label} are ${d.toFixed(2)} apart near ${xy(at)}; at max stroke ${sMax} the gap closes to ${(d - sMax).toFixed(2)} (want ≥ ${dna.minGap})`, at);
+      if (d < hard) add('gap', 'error', `${label} are ${d.toFixed(2)} apart near ${xy(at)}; they look fused. Separate elements need ≥ ${need} between centrelines (stroke ${stroke} + gap ${dna.minGap}), or should actually touch`, at);
+      else if (d < need - 0.01) add('gap', 'warn', `${label} are ${d.toFixed(2)} apart near ${xy(at)}; the gap between the ink is ${(d - stroke).toFixed(2)} (want ≥ ${dna.minGap})`, at);
     }
     const self = selfNarrowest(strokes[i].pts, 3 * need, strokes[i].sub.closed, TOUCH);
-    if (self.d < need - 0.01) add('gap', 'warn', `element ${strokes[i].idx + 1} comes back within ${self.d.toFixed(2)} of itself near ${xy(self.at)}; the inner gap fills in at heavier strokes`, self.at);
+    if (self.d < need - 0.01) add('gap', 'warn', `element ${strokes[i].idx + 1} comes back within ${self.d.toFixed(2)} of itself near ${xy(self.at)}; the inner gap is too narrow`, self.at);
   }
 
-  if (styles.includes('filled') && sils.length) {
+  if (style === 'filled' && sils.length) {
     const polys = sils.map((p) => p.pts);
     for (const p of details) {
       const inside = p.pts.filter((q) => pointInPolygons(q.x, q.y, polys)).length / p.pts.length;
-      if (inside < 0.5) add('detail-outside', 'warn', `detail element ${p.idx + 1} is mostly outside the silhouette, so in the filled style it cuts nothing; make it a normal stroke`);
+      if (inside < 0.5) add('detail-outside', 'warn', `detail element ${p.idx + 1} is mostly outside the silhouette, so it cuts nothing; make it a normal stroke`);
     }
-    for (const p of strokes.filter((s) => s.role === 'stroke' && s.el.attrs['data-only'] !== 'outline')) {
+    for (const p of strokes.filter((s) => s.role === 'stroke')) {
       const silIdx = new Set(sils.map((s) => s.idx));
       if (silIdx.has(p.idx)) continue;
       const inside = p.pts.filter((q) => pointInPolygons(q.x, q.y, polys)).length / p.pts.length;
       const onEdge = sils.some((s) => polylineDistance(p.pts, s.pts).d < 0.3);
-      if (inside > 0.9 && !onEdge) add('hidden-in-filled', 'warn', `element ${p.idx + 1} lies inside the silhouette, so it vanishes in the filled style; mark it data-role="detail" (cut out) or data-only="outline"`);
+      if (inside > 0.9 && !onEdge) add('hidden-in-filled', 'warn', `element ${p.idx + 1} lies inside the silhouette, so it vanishes in the fill; mark it data-role="detail" to cut it out`);
     }
   }
 
@@ -142,6 +136,7 @@ export function lintIcon(src, cfg, { kind = 'icon', detailOverride } = {}) {
       else if (fam === 'sharp' && rx > 0) add('radius', 'warn', `element ${p.idx + 1}: rounded rect in a sharp-cornered set`);
       else if (fam === 'circular' && !okRadii.some((r) => Math.abs(r - rx) < 0.06)) add('radius', 'warn', `element ${p.idx + 1}: rect rx=${rx}; the set uses ${rad.small} / ${rad.large}`);
     }
+    if (dna.pixel) continue;
     const allowed = new Set();
     for (const a of dna.angles || []) { allowed.add(((a % 180) + 180) % 180); allowed.add(((180 - a) % 180 + 180) % 180); }
     if (allowed.size) {
@@ -156,7 +151,8 @@ export function lintIcon(src, cfg, { kind = 'icon', detailOverride } = {}) {
     }
   }
 
-  const step = Number.isInteger(sDef * 2) && !Number.isInteger(sDef) ? 0.25 : 0.5;
+  if (dna.pixel) pixelRules(pieces, stroke, add, xy);
+  const step = Number.isInteger(stroke * 2) && !Number.isInteger(stroke) ? 0.25 : 0.5;
   // only open ends and line-line corners: curve tangent points land wherever the geometry needs them
   const pts = [];
   for (const p of strokes) {
@@ -167,14 +163,35 @@ export function lintIcon(src, cfg, { kind = 'icon', detailOverride } = {}) {
   }
   for (const el of src.elements) if (el.tag === 'circle') pts.push([Number(el.attrs.cx), Number(el.attrs.cy)]);
   const off = pts.filter(([x, y]) => Math.abs(x / step - Math.round(x / step)) > 0.02 || Math.abs(y / step - Math.round(y / step)) > 0.02);
-  if (off.length && off.length / pts.length > 0.25) add('off-grid', 'warn', `${off.length} of ${pts.length} key points are off the ${step} grid (e.g. ${off.slice(0, 3).map(xy).join(' ')}); fine for organic curves, not for straight edges`);
+  if (!dna.pixel && off.length && off.length / pts.length > 0.25) add('off-grid', 'warn', `${off.length} of ${pts.length} key points are off the ${step} grid (e.g. ${off.slice(0, 3).map(xy).join(' ')}); fine for organic curves, not for straight edges`);
 
   const budgetName = detailOverride || dna.detail;
   const budget = DETAIL_BUDGET[budgetName] ?? 5;
-  const count = strokes.filter((p) => p.only !== 'filled').length;
+  const count = strokes.length;
   if (count > budget) add('detail-budget', 'warn', `${count} stroke pieces; "${budgetName}" detail allows about ${budget}. Remove what isn't needed to recognise it`);
 
   return out;
+}
+
+// Pixel art is exact: one curve or off-grid point means half-lit pixels at real size.
+function pixelRules(pieces, stroke, add, xy) {
+  const offset = (stroke % 2) / 2;
+  const near = (v) => Math.abs(v - Math.round(v)) < 0.01;
+  // a silhouette may also close along the ink's outer edge (the open bottom of a bust), which is a pixel boundary
+  const onGrid = ([x, y], sil) => [x, y].every((v) => near(v - offset) || (sil && near(v * 2)));
+  const flagged = new Set();
+  const flag = (p, msg, at) => { if (flagged.has(p.idx)) return; flagged.add(p.idx); add('pixel', 'error', `element ${p.idx + 1}: ${msg}`, at); };
+  for (const p of pieces) {
+    if (p.el.tag === 'circle' || p.el.tag === 'ellipse') { flag(p, `<${p.el.tag}> in a pixel set; draw round shapes as stairs of horizontal and vertical runs`); continue; }
+    if (p.el.tag === 'rect' && Number(p.el.attrs.rx ?? p.el.attrs.ry ?? 0) > 0) { flag(p, 'rounded rect in a pixel set'); continue; }
+    const sil = p.role === 'silhouette';
+    if (!onGrid(p.sub.start, sil)) flag(p, `point ${xy(p.sub.start)} is off the pixel grid (centrelines sit on ${offset ? 'n.5' : 'whole numbers'} at stroke ${stroke})`, p.sub.start);
+    for (const s of p.sub.segs) {
+      if (s.type !== 'L') { flag(p, `curve at ${xy(s.from)}; pixel sets use only horizontal and vertical runs`, s.from); break; }
+      if (Math.abs(s.to[0] - s.from[0]) > 0.01 && Math.abs(s.to[1] - s.from[1]) > 0.01) { flag(p, `diagonal line from ${xy(s.from)}; draw it as a pixel stair`, s.from); break; }
+      if (!onGrid(s.to, sil)) { flag(p, `point ${xy(s.to)} is off the pixel grid (centrelines sit on ${offset ? 'n.5' : 'whole numbers'} at stroke ${stroke})`, s.to); break; }
+    }
+  }
 }
 
 export function waivers(root) {

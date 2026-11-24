@@ -1,4 +1,4 @@
-import { serializeElement, role, only } from './svg.mjs';
+import { serializeElement, role } from './svg.js';
 
 function hash(s) {
   let h = 5381;
@@ -6,17 +6,17 @@ function hash(s) {
   return h.toString(36);
 }
 
-function visible(el, style) {
-  const o = only(el);
-  if (o === 'filled' && style !== 'filled') return false;
-  if (o === 'outline' && style === 'filled') return false;
-  return true;
+// a source may set data-style="filled" on its <svg>: the filled twin of an icon for active states
+export function styleOf(src, dna) {
+  return src.root?.['data-style'] || dna.style;
 }
 
-export function compileSvg(src, opts) {
-  const { style = 'default', stroke, dna, opacity = 0.2, color = 'currentColor' } = opts;
+export function compileSvg(src, dna, opts = {}) {
+  const { color = 'currentColor' } = opts;
+  const style = opts.style || styleOf(src, dna);
+  const stroke = opts.stroke ?? dna.stroke;
   const grid = dna.grid || 24;
-  const els = src.elements.filter((e) => visible(e, style));
+  const els = src.elements;
   const sil = els.filter((e) => role(e) === 'silhouette');
   const strokes = els.filter((e) => role(e) === 'stroke');
   const details = els.filter((e) => role(e) === 'detail');
@@ -25,14 +25,15 @@ export function compileSvg(src, opts) {
     `width="${grid}"`, `height="${grid}"`, `viewBox="0 0 ${grid} ${grid}"`,
     'fill="none"', `stroke="${color}"`, `stroke-width="${round(stroke)}"`,
     `stroke-linecap="${dna.caps || 'round'}"`, `stroke-linejoin="${dna.joins || 'round'}"`,
+    dna.pixel ? 'shape-rendering="crispEdges"' : null,
   ].filter(Boolean).join(' ');
 
   const S = (list) => list.map((e) => serializeElement(e)).join('');
   let body = '';
-  if (style === 'default' || (style !== 'default' && sil.length === 0)) {
+  if (style === 'outline' || sil.length === 0) {
     body = S(strokes) + S(details);
   } else if (style === 'duotone') {
-    body = `<g fill="${color}" stroke="none" opacity="${opacity}">${S(sil)}</g>` + S(strokes) + S(details);
+    body = `<g fill="${color}" stroke="none" opacity="${dna.duotoneOpacity ?? 0.2}">${S(sil)}</g>` + S(strokes) + S(details);
   } else if (style === 'filled') {
     const fillGroup = `<g fill="${color}">${S(sil)}</g>` + S(strokes);
     if (details.length) {

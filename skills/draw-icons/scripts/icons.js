@@ -3,30 +3,37 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { CONFIG_NAME, findConfig, loadConfig, resolved, validate } from './lib/config.mjs';
-import { sourceDir, select, loadSource, listSources } from './lib/source.mjs';
-import { lintIcon, applyWaivers, waivers } from './lib/lint.mjs';
-import { roundPolyline, rect, parsePoints } from './lib/shape.mjs';
+import { CONFIG_NAME, STYLES, findConfig, loadConfig, resolved, validate } from './lib/config.js';
+import { sourceDir, select, loadSource, listSources } from './lib/source.js';
+import { lintIcon, applyWaivers, waivers } from './lib/lint.js';
+import { roundPolyline, rect, parsePoints } from './lib/shape.js';
+import * as usageLib from './lib/usage.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SKILL = path.resolve(HERE, '..');
 
 const USAGE = `icons CLI — run from the project root.
   scan                         facts about the project (framework, icons in use, sizes, fonts, radii)
-  init --preset friendly|chunky|precise --dir <path> [--out <file>]
+  init --preset friendly|chunky|precise --dir <path> [--style outline|duotone|filled] [--out <file>]
                                write ${CONFIG_NAME} from the preset and the scan
   check                        validate ${CONFIG_NAME}; list what is still missing
   shape rect X Y W H [R]       rounded rectangle path in the project's corner family
   shape poly "x,y x,y ..." [--r R|R1,R2..] [--closed]   rounded polyline/polygon path
                                (both take --family circular|squircle|sharp to override the DNA)
   lint [names|all] [--json]    rule checks on sources ("all" includes parts/)
-  render <names|all>           construction sheet PNG per icon (into a temp review folder)
-  sheet [names|all] [--style filled|duotone] [--size 16] [--stroke 2.5] [--out name.png] [--no-keylines]
+  render <names> [--out name.png]
+                               one construction-sheet PNG for the named icons (into a temp review folder)
+  sheet [names|all] [--size 16] [--out name.png] [--no-keylines]
                                consistency sheet PNG (+ blurred copy)
-  build [--force]              lint, then write <dir>/<style>/<name>.svg
+  preview <template.html> [--candidates a.yaml,b.yaml] [--out name.html] [--open]
+                               the template (a piece of the product's UI with <i data-icon="name"> placeholders)
+                               with the icons filled in, one copy per candidate DNA, as a self-contained page
+  uses [names]                 where the code shows each icon (file:line, px size); unused icons;
+                               imports that would break and sizes the icons weren't drawn for
+  build [--force]              lint + check imports, then write <dir>/<name>.svg
 Names may be space- or comma-separated. Global: --config <file>  --source <dir>`;
 
-const BOOLEAN = new Set(['closed', 'force', 'json', 'no-keylines', 'help']);
+const BOOLEAN = new Set(['closed', 'force', 'json', 'no-keylines', 'help', 'open']);
 function parseArgs(argv) {
   const pos = [], flags = {};
   for (let i = 0; i < argv.length; i++) {
@@ -72,14 +79,17 @@ function reviewDir(root) {
   return dir;
 }
 
-const toml = (v) => Array.isArray(v) ? `[${v.map(toml).join(', ')}]`
-  : v && typeof v === 'object' ? `{ ${Object.entries(v).map(([k, x]) => `${k} = ${toml(x)}`).join(', ')} }`
+const PLAIN = /^[A-Za-z_][\w./-]*$/;
+const RESERVED = /^(true|false|null|yes|no|on|off|y|n)$/i;
+const yaml = (v) => Array.isArray(v) ? `[${v.map(yaml).join(', ')}]`
+  : v && typeof v === 'object' ? `{ ${Object.entries(v).map(([k, x]) => `${k}: ${yaml(x)}`).join(', ')} }`
+  : typeof v === 'string' && PLAIN.test(v) && !RESERVED.test(v) ? v
   : JSON.stringify(v);
 
 async function main() {
   switch (cmd) {
     case 'scan': {
-      const { scan } = await import('./lib/scan.mjs');
+      const { scan } = await import('./lib/scan.js');
       console.log(JSON.stringify(scan(process.cwd()), null, 2));
       break;
     }
@@ -91,30 +101,28 @@ async function main() {
       const preset = presets[flags.preset];
       if (!preset) die(`init needs --preset (${known}).`);
       if (typeof flags.dir !== 'string') die('init needs --dir: ask the user where the icons should live.');
-      const { scan } = await import('./lib/scan.mjs');
+      const style = flags.style || 'outline';
+      if (!STYLES.includes(style)) die(`--style must be one of ${STYLES.join(', ')}`);
+      const { scan } = await import('./lib/scan.js');
       const sizes = scan(process.cwd()).iconSizes.map((s) => s.size).filter((s) => typeof s === 'number');
-      const adj = { styles: ['default'], duotoneOpacity: 0.2, ...preset.adjustable };
       const lines = [
-        `product = ""  # one line: what it is and who it's for`,
-        `personality = []  # 3 words for how it should feel`,
-        `sizes = ${toml(sizes)}  # px sizes the icons are shown at`,
-        `dir = ${toml(flags.dir)}  # sources in source/, built SVGs in default/, duotone/, filled/`,
-        `avoid = []`,
+        `product: ""  # one line: what it is and who it's for`,
+        `personality: []  # 3 words for how it should feel`,
+        `sizes: ${yaml(sizes)}  # px sizes the icons are shown at`,
+        `dir: ${yaml(flags.dir)}  # sources in source/, built SVGs next to it`,
+        `avoid: []`,
         ``,
-        `# Change any time, then build.`,
-        `[adjustable]`,
-        ...Object.entries(adj).map(([k, v]) => `${k} = ${toml(v)}`),
-        ``,
-        `# Baked into every drawing: changing it means redrawing every icon.`,
-        `[dna]`,
-        ...Object.entries(preset.dna).map(([k, v]) => `${k} = ${toml(v)}`),
+        `# Baked into every drawing: changing it means redrawing every icon (stroke: re-lint and fix instead).`,
+        `dna:`,
+        `  style: ${yaml(style)}`,
+        ...Object.entries(preset.dna).map(([k, v]) => `  ${k}: ${yaml(v)}`),
       ];
       fs.writeFileSync(target, lines.join('\n') + '\n');
       console.log(`Wrote ${rel(target)} (DNA from the "${flags.preset}" preset). Fill in product and personality, then run check.`);
       break;
     }
     case 'check': {
-      const { raw, file } = context();
+      const { raw, file, cfg, root, src } = context();
       const v = validate(raw);
       console.log(rel(file));
       for (const e of v.errors) console.log(`  ✗ ${e}`);
@@ -122,6 +130,58 @@ async function main() {
       if (v.missing.length) console.log(`  missing: ${v.missing.join(', ')}`);
       if (!v.errors.length && !v.missing.length) console.log('  ✓ complete');
       process.exitCode = v.errors.length || v.missing.length ? 1 : 0;
+      if (!v.errors.length && !v.missing.length) {
+        const p = usageCheck(cfg, root, src);
+        if (p.errors.length || p.warnings.length) console.log('\nIn the code:');
+        printUsageProblems(p);
+      }
+      break;
+    }
+    case 'preview': {
+      const candidates = [].concat(flags.candidates || []).flatMap((c) => String(c).split(',')).map((c) => c.trim()).filter(Boolean);
+      const { cfg, src, root } = context({ needConfig: !candidates.length });
+      const tpl = pos[0];
+      if (!tpl || !fs.existsSync(tpl)) die(`usage: preview <template.html> [--candidates a.yaml,b.yaml] [--out name.html] [--open]\nWrite the template outside the project, e.g. ${path.join(reviewDir(root), 'ui.html')}`);
+      const variants = candidates.length
+        ? candidates.map((c) => {
+          const file = path.resolve(c);
+          const dir = file.replace(/\.ya?ml$/, '');
+          if (!fs.existsSync(file)) die(`No candidate config ${c}`);
+          if (!fs.existsSync(dir)) die(`No source folder for ${c}: expected ${dir}/ next to it`);
+          return { label: path.basename(dir), cfg: resolved(loadConfig(file)), src: dir };
+        })
+        : [{ label: '', cfg, src }];
+      const { buildPreview } = await import('./lib/preview.js');
+      const { html, missing, problems } = buildPreview(tpl, variants);
+      const out = path.join(reviewDir(root), flags.out || 'preview.html');
+      fs.writeFileSync(out, html);
+      console.log(out);
+      for (const p of problems) console.log(`  ✗ ${p}`);
+      for (const m of missing) console.log(`  ! not found, left as is: ${m}`);
+      if (flags.open) {
+        const { spawn } = await import('node:child_process');
+        const [cmd, args] = process.platform === 'darwin' ? ['open', [out]] : process.platform === 'win32' ? ['cmd', ['/c', 'start', '', out]] : ['xdg-open', [out]];
+        spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref();
+      }
+      process.exitCode = problems.length ? 1 : 0;
+      break;
+    }
+    case 'uses': {
+      const { cfg, root, src } = context();
+      const usages = usageLib.findUsages(cfg, root);
+      const wanted = names();
+      const icons = listSources(src).filter((e) => e.kind === 'icon');
+      const list = wanted.length && !wanted.includes('all') ? wanted.map((n) => icons.find((e) => e.name === n) || { name: n, missing: true }) : icons;
+      for (const e of list) {
+        const aliases = e.missing ? null : loadSource(e).root['data-aliases'];
+        const mine = usages.filter((u) => u.name === e.name);
+        console.log(`${e.name}${e.missing ? '  (no source)' : ''}${aliases ? `  (${aliases})` : ''}${mine.length ? '' : '  — not used anywhere'}`);
+        for (const u of mine) console.log(`  ${u.file}:${u.line}${u.small ? `  @${u.small}` : ''}${u.binding ? `  as ${u.binding}` : ''}${u.sizes.length ? `  · file shows icons at ${u.sizes.join(', ')}px` : ''}`);
+      }
+      const p = usageCheck(cfg, root, src, usages);
+      if (p.errors.length || p.warnings.length) console.log('');
+      printUsageProblems(p);
+      process.exitCode = p.errors.length ? 1 : 0;
       break;
     }
     case 'shape': {
@@ -151,43 +211,37 @@ async function main() {
     }
     case 'render': {
       const { cfg, src, root } = context();
-      const R = await import('./lib/render.mjs');
+      const R = await import('./lib/render.js');
       await R.loadResvg();
       const entries = select(src, names());
-      const outDir = reviewDir(root);
-      for (const e of entries) {
+      if (!entries.length) die(`No icons to render in ${rel(src)}.`);
+      const list = entries.flatMap((e) => {
         const s = loadSource(e);
-        const sheet = R.constructionSheet([s], cfg);
-        const file = path.join(outDir, `${e.name}.png`);
-        fs.writeFileSync(file, R.png(sheet));
-        console.log(file);
-        if (s.smallSrc) {
-          const small = { ...s, name: `${s.name}@${s.smallSrc.size}`, elements: s.smallSrc.elements };
-          const f2 = path.join(outDir, `${e.name}@${s.smallSrc.size}.png`);
-          fs.writeFileSync(f2, R.png(R.constructionSheet([small], cfg)));
-          console.log(f2);
-        }
-      }
+        return s.smallSrc ? [s, { ...s, name: `${s.name}@${s.smallSrc.size}`, elements: s.smallSrc.elements }] : [s];
+      });
+      const auto = entries.length === 1 ? entries[0].name : `${entries[0].name}+${entries.length - 1}`;
+      const file = path.join(reviewDir(root), flags.out || `render-${auto}.png`);
+      fs.writeFileSync(file, R.png(R.constructionSheet(list, cfg)));
+      console.log(file);
       break;
     }
     case 'sheet': {
       const { cfg, src, root } = context();
-      const R = await import('./lib/render.mjs');
-      const { compileSvg } = await import('./lib/compile.mjs');
+      const R = await import('./lib/render.js');
+      const { compileSvg } = await import('./lib/compile.js');
       await R.loadResvg();
-      const style = flags.style || 'default';
       const size = Number(flags.size) || 24;
       const entries = select(src, names());
       const items = [
         ...(flags['no-keylines'] ? [] : R.keylineRefs(cfg)),
         ...entries.map((e) => {
           const s = loadSource(e);
-          return { name: e.name, kind: 'icon', svg: compileSvg(s, { style, stroke: Number(flags.stroke) || cfg.adjustable.stroke.default, dna: cfg.dna, color: '#1d1d1f', opacity: cfg.adjustable.duotoneOpacity, idPrefix: 'sh' }) };
+          return { name: e.name, kind: 'icon', svg: compileSvg(s, cfg.dna, { color: '#1d1d1f', idPrefix: 'sh' }) };
         }),
       ];
-      const file = path.join(reviewDir(root), flags.out || `sheet${style !== 'default' ? '-' + style : ''}.png`);
+      const file = path.join(reviewDir(root), flags.out || 'sheet.png');
       if (!entries.length) die(`No icons to show in ${rel(src)}.`);
-      fs.writeFileSync(file, R.png(R.setSheet(items, { size, zoom: size <= 20 ? 3 : 2, cols: Number(flags.cols) || 10, title: style })));
+      fs.writeFileSync(file, R.png(R.setSheet(items, { size, zoom: size <= 20 ? 3 : 2, cols: Number(flags.cols) || 10, title: cfg.dna.style })));
       console.log(file);
       break;
     }
@@ -199,10 +253,16 @@ async function main() {
       const results = await lintAll(cfg, src, []);
       const bad = results.filter((r) => r.findings.some((f) => f.level === 'error'));
       if (bad.length && !flags.force) { printLint(bad); die(`\nBuild stopped: ${bad.length} icon(s) have errors.`); }
-      const { build } = await import('./lib/build.mjs');
+      const usage = usageCheck(cfg, root, src);
+      if (usage.errors.length && !flags.force) {
+        printUsageProblems({ errors: usage.errors, warnings: [] });
+        die('\nBuild stopped: these imports would break. Point them at an icon that exists (ask the user which, if it is not what they asked you to change), or keep the old source.');
+      }
+      const { build } = await import('./lib/build.js');
       const sources = select(src, []).map(loadSource);
       const written = build(sources, cfg, root);
-      console.log(`Built ${sources.length} icons → ${written.length} files in ${cfg.dir}/{${cfg.adjustable.styles.join(',')}}`);
+      console.log(`Built ${sources.length} icons → ${written.length} files in ${cfg.dir}/`);
+      printUsageProblems(usage);
       break;
     }
     default:
@@ -211,15 +271,24 @@ async function main() {
   }
 }
 
+function usageCheck(cfg, root, src, usages) {
+  return usageLib.usageProblems(usages || usageLib.findUsages(cfg, root), cfg, src);
+}
+
+function printUsageProblems({ errors, warnings }) {
+  for (const e of errors) console.log(`  ✗ ${e}`);
+  for (const w of warnings) console.log(`  ! ${w}`);
+}
+
 async function lintAll(cfg, src, names) {
   const entries = names.length && !names.includes('all') ? select(src, names) : listSources(src);
   let R = null;
-  try { R = await import('./lib/render.mjs'); await R.loadResvg(); } catch { R = null; }
-  const { compileSvg } = await import('./lib/compile.mjs');
+  try { R = await import('./lib/render.js'); await R.loadResvg(); } catch { R = null; }
+  const { compileSvg } = await import('./lib/compile.js');
   let ref = null;
   if (R) {
     const G = cfg.dna.grid, k = cfg.dna.keylines;
-    ref = R.inkCoverage(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${G} ${G}" fill="none" stroke="#000" stroke-width="${cfg.adjustable.stroke.default}"><circle cx="${G / 2}" cy="${G / 2}" r="${k.circle / 2}"/></svg>`);
+    ref = R.inkCoverage(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${G} ${G}" fill="none" stroke="#000" stroke-width="${cfg.dna.stroke}"><circle cx="${G / 2}" cy="${G / 2}" r="${k.circle / 2}"/></svg>`);
   }
   const results = [];
   for (const e of entries) {
@@ -231,7 +300,7 @@ async function lintAll(cfg, src, names) {
       findings = findings.concat(small.map((f) => ({ ...f, message: `[@${s.smallSrc.size}] ${f.message}` })));
     }
     if (R && ref && !findings.some((f) => f.level === 'error') && e.kind === 'icon') {
-      const ink = R.inkCoverage(compileSvg(s, { style: 'default', stroke: cfg.adjustable.stroke.default, dna: cfg.dna, color: '#000' }));
+      const ink = R.inkCoverage(compileSvg(s, cfg.dna, { style: 'outline', color: '#000' }));
       const ratio = ink / ref;
       if (ratio > 1.6) findings.push({ rule: 'heavy', level: 'warn', message: `${ratio.toFixed(2)}× the ink of the keyline circle; it will look darker and busier than its neighbours` });
       else if (ratio < 0.3) findings.push({ rule: 'light', level: 'info', message: `only ${ratio.toFixed(2)}× the ink of the keyline circle; fine for simple glyphs (minus, chevron), otherwise it will look faint` });

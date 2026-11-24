@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { CONFIG_NAME } from './config.mjs';
+import { CONFIG_NAME } from './config.js';
 
 const SKIP = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.nuxt', '.svelte-kit', '.output', 'out', 'coverage', '.turbo', '.vercel', 'vendor', 'Pods', '.cache']);
 const CODE = /\.(tsx?|jsx?|vue|svelte|astro|mdx)$/;
@@ -27,7 +27,7 @@ function toPx(v) {
 }
 const TW_SIZE = { '3': 12, '3.5': 14, '4': 16, '4.5': 18, '5': 20, '6': 24, '7': 28, '8': 32, '10': 40, '12': 48 };
 
-function walk(root, limit = 6000) {
+export function walk(root, limit = 6000) {
   const files = [];
   const stack = [root];
   while (stack.length && files.length < limit) {

@@ -1,6 +1,6 @@
-# Setting up `icons.toml`
+# Setting up `icons.yaml`
 
-The file is a line about the product plus the style DNA. Like `biome.json` tells Biome how to behave, this tells you how to draw for *this* product. Fill it with as few questions as possible: find what you can, ask only what blocks the work, and show pictures instead of asking about design jargon (most users aren't designers).
+The file is a line about the product plus the style DNA. Like `biome.json` tells Biome how to behave, this tells you how to draw for *this* product. Fill it with as few questions as possible: find what you can, ask only what blocks the work, and show pictures instead of asking about design terms.
 
 There is no draft state: the file is written once everything is decided. If it exists, the project is set up.
 
@@ -8,46 +8,42 @@ There is no draft state: the file is written once everything is decided. If it e
 1. Flow
 2. The fields
 3. Questions that work (plain language → field)
-4. The test sheet
+4. The candidate preview
 5. Changing things later
 
 ## 1. Flow
 
 1. **Scan.** `icons scan`. Read the output: framework, which icons the UI already shows and at what sizes, fonts, radii, a suggested icon folder. Also look at the UI yourself if you can (screenshots, the CSS): how round buttons and cards are, how heavy the body text is, whether the product feels soft or technical.
 2. **One message: what you found + the gaps.** State the findings as a short list ("React + Vite + Tailwind, lucide-react in the sidebar at 16px, square UI, pixel font"), then ask the open questions from section 3, at most ~6, each with options to pick from: 2–4 that fit this project, your recommendation first, plus "decide for me". Always include **where the icons go** and, if the project can't import SVGs as components yet, say which loader you'll add (SKILL.md step 3). When the user says "decide for me", decide and say what you picked in one line.
-3. **Show the test sheet** (section 4) and let the user pick.
-4. **Write the file.** Copy the winning candidate to `icons.toml` at the project root (or `init --preset <winner> --dir <dir>`), then fill in the answers. Put the winning test icons in `<dir>/source/`.
+3. **Show the candidate preview** (section 4) and let the user pick.
+4. **Write the file.** Copy the winning candidate to `icons.yaml` at the project root (or `init --preset <winner> --dir <dir>`), then fill in the answers. Put the winning test icons in `<dir>/source/`.
 5. **`check`** must report `✓ complete`.
 
 If a tool for asking structured questions is available (multiple-choice cards), use it; it's faster for the user than typing. Without one, write each question with a short numbered list of options so the user can answer "1, 3, 2".
 
 ## 2. The fields
 
-```toml
-product = "Invoicing app for freelance designers"
-personality = ["calm", "friendly", "precise"]
-sizes = [16, 20]                # px sizes icons are shown at
-dir = "src/components/icons"
-avoid = ["letters or numbers inside icons", "dollar sign for money (use a banknote)"]
+```yaml
+product: Invoicing app for freelance designers
+personality: [calm, friendly, precise]
+sizes: [16, 20]                # px sizes icons are shown at
+dir: src/components/icons
+avoid: [letters or numbers inside icons, dollar sign for money (use a banknote)]
 
-# Change any time, then build.
-[adjustable]
-styles = ["default", "filled"]
-duotoneOpacity = 0.2
-stroke = { default = 2, min = 1.5, max = 2.5 }
-
-# Baked into every drawing: changing it means redrawing every icon.
-[dna]
-grid = 24
-padding = 1
-keylines = { circle = 20, square = 18, portrait = [16, 20], landscape = [20, 16] }
-corners = { family = "circular", radius = { large = 2, small = 1 }, largeThreshold = 8 }
-caps = "round"
-joins = "round"
-angles = [0, 45, 90]
-detail = "low"
-minGap = 2
-badge = { position = "bottom-right", size = 8, gap = 2 }
+# Baked into every drawing: changing it means redrawing every icon (stroke: re-lint and fix instead).
+dna:
+  style: outline
+  stroke: 2
+  grid: 24
+  padding: 1
+  keylines: { circle: 20, square: 18, portrait: [16, 20], landscape: [20, 16] }
+  corners: { family: circular, radius: { large: 2, small: 1 }, largeThreshold: 8 }
+  caps: round
+  joins: round
+  angles: [0, 45, 90]
+  detail: low
+  minGap: 2
+  badge: { position: bottom-right, size: 8, gap: 2 }
 ```
 
 | Field | What it holds | How you get it |
@@ -55,30 +51,33 @@ badge = { position = "bottom-right", size = 8, gap = 2 }
 | `product` | One line: what it is and who it's for | ask (offer your best reading) |
 | `personality` | 3 words for how it should feel; guides metaphors and the DNA | ask |
 | `sizes` | Pixel sizes icons are shown at; the render shows these | found (`scan` reads `size-4`, `size={20}`, …) |
-| `dir` | The icon folder: `source/` plus the built style folders | ask (offer `scan`'s `suggestedDir` first) |
+| `dir` | The icon folder: `source/` plus the built SVGs | ask (offer `scan`'s `suggestedDir` first) |
 | `avoid` | Hard nos, incl. banned metaphors | ask once |
-| `adjustable.styles` | which of `default`, `duotone`, `filled` | ask |
-| `adjustable.stroke` | `default`, `min`, `max`. `max` drives the gap rule, so don't make it bigger than needed | preset; range asked |
-| `adjustable.duotoneOpacity` | 0.2 (Phosphor) – 0.4 (Hugeicons) | decide |
-| `dna.grid`, `dna.padding` | Canvas (24) and empty margin at the default stroke | preset |
+| `dna.style` | `outline`, `duotone` or `filled`: one per set | asked, or taken from the request ("duotone, sharp") |
+| `dna.stroke` | Stroke width in grid units; gaps are drawn for it | preset, tuned on the candidate preview |
+| `dna.duotoneOpacity` | Optional, duotone only: 0.2 (Phosphor, the default) – 0.4 (Hugeicons) | decide |
+| `dna.grid`, `dna.padding` | Canvas (24) and empty margin | preset |
 | `dna.keylines` | circle / square / portrait / landscape sizes that look equally big | preset |
-| `dna.corners` | `family` circular / squircle / sharp; `radius.large` for shapes ≥ `largeThreshold`, `radius.small` below | test sheet |
-| `dna.caps`, `dna.joins` | round / butt / square; round / miter / bevel | test sheet |
+| `dna.corners` | `family` circular / squircle / sharp; `radius.large` for shapes ≥ `largeThreshold`, `radius.small` below | candidate preview |
+| `dna.caps`, `dna.joins` | round / butt / square; round / miter / bevel | candidate preview |
 | `dna.angles` | Allowed line angles, e.g. `[0, 45, 90]` | preset |
 | `dna.detail` | minimal / low / medium / high: how many strokes an icon may have | from sizes (≤16px → minimal or low) |
-| `dna.minGap` | Smallest visible gap between separate elements, kept at the max stroke | preset |
+| `dna.minGap` | Smallest visible gap between the ink of separate elements | preset |
 | `dna.badge` | Where modifier badges (+, ✓, ×) go and how big | preset |
+| `dna.pixel` | Optional, `true` for pixel art: every grid unit is one icon pixel. Requires a whole-number `stroke`, `sharp` corners, `miter` joins, square or butt caps, angles `[0, 90]`, and `sizes` that are whole multiples of `grid`. Lint then allows only horizontal and vertical runs on the pixel grid, and the built SVGs render with crisp edges | the product has a pixel or retro look, or the user asks for it |
 | `dna.signature` | Optional. At most one distinctive trait (e.g. "one corner of every container is cut at 45°"); restraint matters more than novelty | ask only when the user wants character |
 
-When a value isn't the obvious one, leave the reason as a short comment on its line (`minGap = 0.4  # pixel art: diagonal contact counts as a join`). Nothing else goes in the file; `check` rejects unknown keys.
+When a value isn't the obvious one, leave the reason as a short comment on its line (`minGap: 0.4  # pixel art: diagonal contact counts as a join`). Nothing else goes in the file; `check` rejects unknown keys.
 
 ### Matching DNA to the product
 - **Stroke ≈ the text next to it.** Icons beside 14px regular text want a thinner stroke (1.5 at 24 grid) than icons beside bold UI (2+).
 - **Corners echo the UI.** Pill buttons and big card radii → squircle or larger circular radii; sharp-cornered UI → small radii, maybe miter joins.
 - **Personality → caps/joins.** Friendly, calm, playful → round caps and joins. Precise, technical, serious → square/butt caps, miter joins, small radii.
+- **Pixel look** (pixel font, retro UI): `pixel: true`, a small grid (12 or 16 icon pixels), stroke fixed at 1, sharp corners, square caps, miter joins, angles `[0, 90]`, and `sizes` at whole multiples of the grid (a 12 grid at 24px makes every icon pixel 2×2 screen pixels). Pick the grid so one multiple matches the size the UI needs.
 - **Small sizes → less detail.** If icons are mostly 16px, set `detail` to `minimal`/`low`, and keep `minGap` ≥ 2.
-- **Chunky sets** (kids, games, bold consumer apps): start from `chunky`. A heavy stroke needs smaller keylines to keep padding, and leaves little room inside shapes, so the filled style carries more of the detail.
-- **Max stroke is a promise.** Every gap is sized for it (`max + minGap` between centrelines), so a higher max means more room inside every icon and less detail. Don't make it bigger than the user needs.
+- **Chunky sets** (kids, games, bold consumer apps): start from `chunky`. A heavy stroke needs smaller keylines to keep padding, and leaves little room inside shapes.
+- **Stroke costs detail.** Every gap is sized for it (`stroke + minGap` between centrelines), so a heavier stroke leaves less room inside every icon.
+- **Style.** Outline is the safe default. Duotone suits friendly, illustrative products. Filled suits bold, small, high-contrast UI, and needs silhouettes that read on their own.
 
 ## 3. Questions that work
 
@@ -89,23 +88,25 @@ Ask about feel and use, not design terms. The options below are examples: write 
 | "What is the product, and who is it for?" | Your best reading from the README / package.json as option 1 ("A reading tracker for book clubs?"), then "something else" | `product` |
 | "How should the icons feel?" | calm & precise / friendly & soft / bold & playful / serious & technical (the one that matches the UI first) | `personality` → caps, joins, corners |
 | "Where should the icon files live?" | `scan`'s `suggestedDir` / one or two other folders that fit the layout (`src/icons`, `src/assets/icons`) | `dir` |
-| "Do you need other styles besides outline?" | outline only / + filled for active states (selected tab, liked heart) / + filled and two-tone | `adjustable.styles` |
-| "Should people be able to change the line thickness later?" | no, keep it fixed / a little thinner or thicker / a wide range | `adjustable.stroke.min/max` |
+| "Which look?" (skip if the request already says) | outline / duotone (outline + soft tint) / filled (solid shapes) | `dna.style` |
 | "Anything icons should never show?" | nothing special / no text or letters inside icons / no hands or people / no money symbols (multi-select) | `avoid` |
 
 Every question gets a "decide for me" option. Don't ask about grid, padding, keylines, angles, gaps or badges; those come from the preset or your judgement.
 
-## 4. The test sheet
+## 4. The candidate preview
 
-Show, don't describe. Draw the same six test icons — **house, search, settings, user, file, plus one product-specific concept** — and put them on a sheet.
+The user picks a look by seeing the icons in their own UI, not on a grid.
 
-Compare looks, not drawings. Make 2–3 candidate DNAs that differ in one or two things the user will feel (stroke weight and corner family are the big ones; caps/joins next). Start from presets: `friendly`, `chunky`, `precise`. Keep candidates outside the project (a temp folder): `init --preset <p> --dir <dir> --out <tmp>/candidate-a.toml` per candidate, each with its own source folder. Draw the six icons **once**, with gaps sized for the strictest candidate, and only re-run the `shape` helper with each candidate's `--family`/radius. Render each with `sheet all --config <tmp>/candidate-a.toml --source <tmp>/candidate-a --out candidate-a.png`. Show the sheets side by side and let the user pick. Also show `--style filled` if they want filled icons.
+**Which icons.** 4–6 from the icons this request is for (the sidebar's items, the tab bar's), chosen to differ as much as possible: a round one, a square one, a tall or wide one, the most detailed one, and the product-specific concept. If the request doesn't name icons yet, use house, search, settings, user, file and one product-specific concept.
 
-Tell the user the PNG paths (or open them) so they can actually see the sheets.
+**Candidates.** Make 2–3 candidate DNAs that differ in one or two things the user will feel (stroke weight and corner family are the big ones; caps/joins next). All share the chosen `style`. Start from presets: `friendly`, `chunky`, `precise`. Keep candidates outside the project (a temp folder): `init --preset <p> --style <style> --dir <dir> --out <tmp>/candidate-a.yaml` per candidate, with its sources in `<tmp>/candidate-a/`. Draw the icons **once**, with gaps sized for the heaviest candidate stroke, and only re-run the `shape` helper with each candidate's `--family`/radius. Check each candidate yourself with `render`/`sheet --config <tmp>/candidate-a.yaml --source <tmp>/candidate-a` before the user sees anything.
+
+**The page.** Build a template of the UI the icons go into and run `preview <template> --candidates <tmp>/candidate-a.yaml,<tmp>/candidate-b.yaml --open`; see "The preview page" in `review.md`. Ask which one (recommendation first; "A's corners with B's weight" is a fine answer), and adjust and re-run until they're happy. The winner's sources become the first icons in `<dir>/source/`.
 
 ## 5. Changing things later
 
-- **`[adjustable]`** (stroke range, styles, duotone opacity): edit and `build`. Raising `stroke.max` can break gaps; run `lint all` first.
-- **`[dna]`**: it changes every drawing. Tell the user, get a yes, update it, redraw all icons.
+- **`dna.stroke`**: edit, `lint all`, fix what it flags (a heavier stroke closes gaps), `build`.
+- **The rest of `dna`**, `style` included: it changes every drawing. Tell the user, get a yes, update it, redraw all icons.
+- **`sizes`** (the user wants icons bigger or smaller): offer the nearest sizes that work, side by side in a `preview`; add the pick. In a `pixel` set only whole multiples of `grid` work. A size in between means shrinking the drawings, which is a DNA change.
 - **`dir`**: move the folder, update `dir`, `build`, and fix the imports.
 - **New icons** don't touch the config.

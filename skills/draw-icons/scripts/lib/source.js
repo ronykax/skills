@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { parseSvg } from './svg.mjs';
+import { parseSvg } from './svg.js';
 
 export function sourceDir(cfg, root) {
   return path.resolve(root, cfg.dir || 'icons', 'source');

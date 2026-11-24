@@ -1,13 +1,13 @@
 {
-  "name": "draw-icons-scripts",
+  "name": "draw-icons",
   "private": true,
   "type": "module",
   "description": "CLI for the draw-icons skill: scan, init, check, shape, lint, render, sheet, build.",
   "bin": {
-    "icons": "./icons.mjs"
+    "icons": "./icons.js"
   },
   "dependencies": {
     "@resvg/resvg-js": "2.6.2",
-    "smol-toml": "1.9.1"
+    "yaml": "2.9.1"
   }
 }

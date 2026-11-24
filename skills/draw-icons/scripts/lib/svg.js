@@ -1,4 +1,4 @@
-import { parsePath, fmt } from './geom.mjs';
+import { parsePath, fmt } from './geom.js';
 
 export const SHAPES = ['path', 'line', 'polyline', 'polygon', 'circle', 'ellipse', 'rect'];
 
@@ -11,7 +11,7 @@ const GEOMETRY_ATTRS = {
   ellipse: ['cx', 'cy', 'rx', 'ry'],
   rect: ['x', 'y', 'width', 'height', 'rx', 'ry'],
 };
-const ROLE_ATTRS = ['data-role', 'data-only'];
+const ROLE_ATTRS = ['data-role'];
 
 export function allowedAttrs(tag) {
   return [...(GEOMETRY_ATTRS[tag] || []), ...ROLE_ATTRS];
@@ -98,11 +98,6 @@ export function elementSubpaths(el) {
 export function role(el) {
   const r = el.attrs['data-role'];
   return r === 'silhouette' || r === 'detail' ? r : 'stroke';
-}
-
-export function only(el) {
-  const o = el.attrs['data-only'];
-  return o === 'filled' || o === 'outline' ? o : null;
 }
 
 const esc = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');

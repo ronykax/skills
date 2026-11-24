@@ -1,5 +1,5 @@
-import { compileSvg } from './compile.mjs';
-import { elementSubpaths, role } from './svg.mjs';
+import { compileSvg } from './compile.js';
+import { elementSubpaths, role } from './svg.js';
 
 let Resvg = null;
 export async function loadResvg() {
@@ -51,7 +51,7 @@ function pixelTile(svg, x, y, px, zoom, bg = '#fff') {
 }
 
 function constructionView(src, cfg, x, y, scale) {
-  const { dna, adjustable } = cfg;
+  const { dna } = cfg;
   const G = dna.grid, p = dna.padding, k = dna.keylines || {};
   const W = G * scale;
   let g = `<svg x="${x}" y="${y}" width="${W}" height="${W}" viewBox="0 0 ${G} ${G}">`;
@@ -65,8 +65,8 @@ function constructionView(src, cfg, x, y, scale) {
   if (k.square) g += `<rect x="${(G - k.square) / 2}" y="${(G - k.square) / 2}" width="${k.square}" height="${k.square}" ${kl}/>`;
   if (k.portrait) g += `<rect x="${(G - k.portrait[0]) / 2}" y="${(G - k.portrait[1]) / 2}" width="${k.portrait[0]}" height="${k.portrait[1]}" ${kl}/>`;
   if (k.landscape) g += `<rect x="${(G - k.landscape[0]) / 2}" y="${(G - k.landscape[1]) / 2}" width="${k.landscape[0]}" height="${k.landscape[1]}" ${kl}/>`;
-  const icon = compileSvg(src, { style: 'default', stroke: adjustable.stroke.default, dna, color: '#1d1d1f', xmlns: false });
-  g += icon.replace(/^<svg [^>]*>/, `<g fill="none" stroke="#1d1d1f" stroke-opacity="0.82" stroke-width="${adjustable.stroke.default}" stroke-linecap="${dna.caps}" stroke-linejoin="${dna.joins}">`).replace(/<\/svg>$/, '</g>');
+  const icon = compileSvg(src, dna, { style: 'outline', color: '#1d1d1f', xmlns: false });
+  g += icon.replace(/^<svg [^>]*>/, `<g fill="none" stroke="#1d1d1f" stroke-opacity="0.82" stroke-width="${dna.stroke}" stroke-linecap="${dna.caps}" stroke-linejoin="${dna.joins}">`).replace(/<\/svg>$/, '</g>');
   for (const el of src.elements) {
     const r = role(el);
     let subs = [];
@@ -88,47 +88,38 @@ function constructionView(src, cfg, x, y, scale) {
 }
 
 export function constructionSheet(sources, cfg) {
-  const { dna, adjustable } = cfg;
-  const styles = adjustable.styles;
-  const s = adjustable.stroke;
-  const blockH = 330;
-  let W = 760;
-  let body = '';
-  sources.forEach((src, i) => {
-    const y0 = i * blockH + 10;
+  const { dna } = cfg;
+  const blockH = 300;
+  const blocks = sources.map((src, i) => {
+    const y0 = 10;
+    const built = compileSvg(src, dna, { color: '#1d1d1f', idPrefix: `c${i}` });
+    let body = '';
     body += label(14, y0 + 16, src.name, { size: 15, color: '#111', weight: 'bold' });
-    body += constructionView(src, cfg, 14, y0 + 26, 11);
+    body += constructionView(src, cfg, 14, y0 + 26, 264 / (dna.grid || 24));
     const x0 = 300;
-    body += label(x0, y0 + 16, 'styles @ default stroke');
-    styles.forEach((st, j) => {
-      const svg = compileSvg(src, { style: st, stroke: s.default, dna, color: '#1d1d1f', opacity: adjustable.duotoneOpacity, idPrefix: `c${i}${j}` });
-      body += place(svg, x0 + j * 84, y0 + 26, 64) + label(x0 + j * 84 + 32, y0 + 104, st, { anchor: 'middle', size: 10 });
-    });
-    const xs = x0 + Math.max(styles.length, 1) * 84 + 20;
-    body += label(xs, y0 + 16, 'stroke min / default / max');
-    [...new Set([s.min, s.default, s.max])].forEach((w, j) => {
-      const svg = compileSvg(src, { style: 'default', stroke: w, dna, color: '#1d1d1f', idPrefix: `r${i}${j}` });
-      body += place(svg, xs + j * 64, y0 + 34, 48) + label(xs + j * 64 + 24, y0 + 104, String(w), { anchor: 'middle', size: 10 });
-    });
-    body += label(x0, y0 + 134, 'real pixels (enlarged ×4): sizes used in the product');
+    body += label(x0, y0 + 16, 'as built');
+    body += place(built, x0, y0 + 26, 64);
+    body += label(x0, y0 + 124, 'real pixels (enlarged ×4): sizes used in the product');
     const ctx = cfg.sizes.filter((n) => n <= 32);
     const sizes = [...new Set(ctx.length ? ctx : [16, 24])].sort((a, b) => a - b).slice(0, 4);
     let px = x0;
     for (const size of sizes) {
-      const svg = compileSvg(src, { style: 'default', stroke: s.default, dna, color: '#1d1d1f' });
-      body += pixelTile(svg, px, y0 + 142, size, 4) + label(px, y0 + 142 + size * 4 + 13, `${size}px`, { size: 10 });
+      body += pixelTile(built, px, y0 + 132, size, 4) + label(px, y0 + 132 + size * 4 + 13, `${size}px`, { size: 10 });
       px += size * 4 + 14;
     }
-    if (styles.includes('filled')) {
-      const f = compileSvg(src, { style: 'filled', stroke: s.default, dna, color: '#1d1d1f', idPrefix: `f${i}` });
-      body += pixelTile(f, px, y0 + 142, 20, 4) + label(px, y0 + 142 + 93, 'filled 20px', { size: 10 });
-      px += 94;
-    }
-    W = Math.max(W, px + 10, xs + 3 * 64 + 10);
-    body += `<line x1="0" y1="${y0 + blockH - 6}" x2="${W}" y2="${y0 + blockH - 6}" stroke="#e5e5e5"/>`;
+    return { body, w: px + 10 };
   });
-  const H = sources.length * blockH + 10;
-  const legend = label(14, H + 4, 'red = centreline + nodes · orange = detail (cut out when filled) · blue = silhouette · pink frame = padding · dashed = keylines', { size: 10, color: '#888' });
+  // two columns from 4 icons on, so a batch stays one image that is readable without zooming
+  const cols = sources.length > 3 ? 2 : 1;
+  const bw = Math.max(760, ...blocks.map((b) => b.w));
+  const rows = Math.ceil(sources.length / cols);
+  const W = cols * bw;
+  let body = '';
+  blocks.forEach((b, i) => { body += `<g transform="translate(${(i % cols) * bw} ${Math.floor(i / cols) * blockH})">${b.body}</g>`; });
+  for (let r = 1; r <= rows; r++) body += `<line x1="0" y1="${r * blockH + 4}" x2="${W}" y2="${r * blockH + 4}" stroke="#e5e5e5"/>`;
+  if (cols > 1) body += `<line x1="${bw}" y1="0" x2="${bw}" y2="${rows * blockH}" stroke="#e5e5e5"/>`;
+  const H = rows * blockH + 10;
+  const legend = label(14, H + 4, 'red = centreline + nodes · orange = detail (cut out of the fill) · blue = silhouette · pink frame = padding · dashed = keylines', { size: 10, color: '#888' });
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H + 14}" viewBox="0 0 ${W} ${H + 14}"><rect width="100%" height="100%" fill="#fafafa"/>${body}${legend}</svg>`;
 }
 
@@ -156,8 +147,8 @@ export function setSheet(items, { size = 24, zoom = 2, cols = 10, title = '' } =
 }
 
 export function keylineRefs(cfg) {
-  const { dna, adjustable } = cfg;
-  const G = dna.grid, k = dna.keylines || {}, w = adjustable.stroke.default;
+  const { dna } = cfg;
+  const G = dna.grid, k = dna.keylines || {}, w = dna.stroke;
   const root = (inner) => `<svg xmlns="http://www.w3.org/2000/svg" width="${G}" height="${G}" viewBox="0 0 ${G} ${G}" fill="none" stroke="#2f80ed" stroke-width="${w}" stroke-linecap="${dna.caps}" stroke-linejoin="${dna.joins}">${inner}</svg>`;
   const r = dna.corners.family === 'sharp' ? 0 : dna.corners.radius.large;
   const out = [];
