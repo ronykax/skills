@@ -2,21 +2,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-import { CONFIG_NAME, STYLES, findConfig, loadConfig, resolved, validate } from './lib/config.js';
+import { CONFIG_NAME, findConfig, loadConfig, resolved, validate } from './lib/config.js';
 import { sourceDir, select, loadSource, listSources } from './lib/source.js';
 import { lintIcon, applyWaivers, waivers } from './lib/lint.js';
 import { roundPolyline, rect, parsePoints } from './lib/shape.js';
 import * as usageLib from './lib/usage.js';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const SKILL = path.resolve(HERE, '..');
-
 const USAGE = `icons CLI — run from the project root.
-  scan                         facts about the project (framework, icons in use, sizes, fonts, radii)
-  init --preset friendly|chunky|precise --dir <path> [--style outline|duotone|filled] [--out <file>]
-                               write ${CONFIG_NAME} from the preset and the scan
-  check                        validate ${CONFIG_NAME}; list what is still missing
+  check                        validate ${CONFIG_NAME}; list what is still missing, imports that
+                               would break and sizes the icons weren't drawn for
   shape rect X Y W H [R]       rounded rectangle path in the project's corner family
   shape poly "x,y x,y ..." [--r R|R1,R2..] [--closed]   rounded polyline/polygon path
                                (both take --family circular|squircle|sharp to override the DNA)
@@ -28,8 +22,6 @@ const USAGE = `icons CLI — run from the project root.
   preview <template.html> [--candidates a.yaml,b.yaml] [--out name.html] [--open]
                                the template (a piece of the product's UI with <i data-icon="name"> placeholders)
                                with the icons filled in, one copy per candidate DNA, as a self-contained page
-  uses [names]                 where the code shows each icon (file:line, px size); unused icons;
-                               imports that would break and sizes the icons weren't drawn for
   build [--force]              lint + check imports, then write <dir>/<name>.svg
 Names may be space- or comma-separated. Global: --config <file>  --source <dir>`;
 
@@ -79,48 +71,8 @@ function reviewDir(root) {
   return dir;
 }
 
-const PLAIN = /^[A-Za-z_][\w./-]*$/;
-const RESERVED = /^(true|false|null|yes|no|on|off|y|n)$/i;
-const yaml = (v) => Array.isArray(v) ? `[${v.map(yaml).join(', ')}]`
-  : v && typeof v === 'object' ? `{ ${Object.entries(v).map(([k, x]) => `${k}: ${yaml(x)}`).join(', ')} }`
-  : typeof v === 'string' && PLAIN.test(v) && !RESERVED.test(v) ? v
-  : JSON.stringify(v);
-
 async function main() {
   switch (cmd) {
-    case 'scan': {
-      const { scan } = await import('./lib/scan.js');
-      console.log(JSON.stringify(scan(process.cwd()), null, 2));
-      break;
-    }
-    case 'init': {
-      const target = path.resolve(flags.out || CONFIG_NAME);
-      if (fs.existsSync(target) && !flags.force) die(`${rel(target)} already exists (use --force to overwrite).`);
-      const presets = JSON.parse(fs.readFileSync(path.join(SKILL, 'assets', 'presets.json'), 'utf8'));
-      const known = Object.keys(presets).filter((k) => !k.startsWith('_')).join(', ');
-      const preset = presets[flags.preset];
-      if (!preset) die(`init needs --preset (${known}).`);
-      if (typeof flags.dir !== 'string') die('init needs --dir: ask the user where the icons should live.');
-      const style = flags.style || 'outline';
-      if (!STYLES.includes(style)) die(`--style must be one of ${STYLES.join(', ')}`);
-      const { scan } = await import('./lib/scan.js');
-      const sizes = scan(process.cwd()).iconSizes.map((s) => s.size).filter((s) => typeof s === 'number');
-      const lines = [
-        `product: ""  # one line: what it is and who it's for`,
-        `personality: []  # 3 words for how it should feel`,
-        `sizes: ${yaml(sizes)}  # px sizes the icons are shown at`,
-        `dir: ${yaml(flags.dir)}  # sources in source/, built SVGs next to it`,
-        `avoid: []`,
-        ``,
-        `# Baked into every drawing: changing it means redrawing every icon (stroke: re-lint and fix instead).`,
-        `dna:`,
-        `  style: ${yaml(style)}`,
-        ...Object.entries(preset.dna).map(([k, v]) => `  ${k}: ${yaml(v)}`),
-      ];
-      fs.writeFileSync(target, lines.join('\n') + '\n');
-      console.log(`Wrote ${rel(target)} (DNA from the "${flags.preset}" preset). Fill in product and personality, then run check.`);
-      break;
-    }
     case 'check': {
       const { raw, file, cfg, root, src } = context();
       const v = validate(raw);
@@ -134,6 +86,7 @@ async function main() {
         const p = usageCheck(cfg, root, src);
         if (p.errors.length || p.warnings.length) console.log('\nIn the code:');
         printUsageProblems(p);
+        if (p.errors.length) process.exitCode = 1;
       }
       break;
     }
@@ -164,24 +117,6 @@ async function main() {
         spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref();
       }
       process.exitCode = problems.length ? 1 : 0;
-      break;
-    }
-    case 'uses': {
-      const { cfg, root, src } = context();
-      const usages = usageLib.findUsages(cfg, root);
-      const wanted = names();
-      const icons = listSources(src).filter((e) => e.kind === 'icon');
-      const list = wanted.length && !wanted.includes('all') ? wanted.map((n) => icons.find((e) => e.name === n) || { name: n, missing: true }) : icons;
-      for (const e of list) {
-        const aliases = e.missing ? null : loadSource(e).root['data-aliases'];
-        const mine = usages.filter((u) => u.name === e.name);
-        console.log(`${e.name}${e.missing ? '  (no source)' : ''}${aliases ? `  (${aliases})` : ''}${mine.length ? '' : '  — not used anywhere'}`);
-        for (const u of mine) console.log(`  ${u.file}:${u.line}${u.small ? `  @${u.small}` : ''}${u.binding ? `  as ${u.binding}` : ''}${u.sizes.length ? `  · file shows icons at ${u.sizes.join(', ')}px` : ''}`);
-      }
-      const p = usageCheck(cfg, root, src, usages);
-      if (p.errors.length || p.warnings.length) console.log('');
-      printUsageProblems(p);
-      process.exitCode = p.errors.length ? 1 : 0;
       break;
     }
     case 'shape': {
@@ -241,7 +176,7 @@ async function main() {
       ];
       const file = path.join(reviewDir(root), flags.out || 'sheet.png');
       if (!entries.length) die(`No icons to show in ${rel(src)}.`);
-      fs.writeFileSync(file, R.png(R.setSheet(items, { size, zoom: size <= 20 ? 3 : 2, cols: Number(flags.cols) || 10, title: cfg.dna.style })));
+      fs.writeFileSync(file, R.png(R.setSheet(items, { size, zoom: size <= 20 ? 3 : 2, title: cfg.dna.style })));
       console.log(file);
       break;
     }
@@ -271,8 +206,8 @@ async function main() {
   }
 }
 
-function usageCheck(cfg, root, src, usages) {
-  return usageLib.usageProblems(usages || usageLib.findUsages(cfg, root), cfg, src);
+function usageCheck(cfg, root, src) {
+  return usageLib.usageProblems(usageLib.findUsages(cfg, root), cfg, src);
 }
 
 function printUsageProblems({ errors, warnings }) {
@@ -315,13 +250,12 @@ function printLint(results) {
   const icon = { error: '✗', warn: '!', info: '·', waived: '~' };
   let errors = 0, warns = 0;
   for (const r of results) {
-    const shown = r.findings;
     const bad = r.findings.filter((f) => f.level === 'error').length, w = r.findings.filter((f) => f.level === 'warn').length;
     errors += bad; warns += w;
     const head = bad ? '✗' : w ? '!' : '✓';
     const ink = r.findings.find((f) => f.rule === 'ink');
     console.log(`${head} ${r.kind === 'part' ? 'part ' : ''}${r.name}${ink ? `  (${ink.message})` : ''}`);
-    for (const f of shown) if (f.rule !== 'ink') console.log(`    ${icon[f.level]} ${f.rule}: ${f.message}`);
+    for (const f of r.findings) if (f.rule !== 'ink') console.log(`    ${icon[f.level]} ${f.rule}: ${f.message}`);
   }
   console.log(`\n${results.length} checked · ${errors} errors · ${warns} warnings`);
 }

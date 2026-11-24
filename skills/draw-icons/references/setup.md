@@ -13,10 +13,16 @@ There is no draft state: the file is written once everything is decided. If it e
 
 ## 1. Flow
 
-1. **Scan.** `icons scan`. Read the output: framework, which icons the UI already shows and at what sizes, fonts, radii, a suggested icon folder. Also look at the UI yourself if you can (screenshots, the CSS): how round buttons and cards are, how heavy the body text is, whether the product feels soft or technical.
+1. **Look at the project.** Find out, from `package.json` and a few searches:
+   - the framework and bundler, and whether it can import an SVG as a component yet
+   - the icon library in use (lucide, heroicons, tabler…), which icons it shows, and at what px sizes (`size={20}`, Tailwind `size-4`/`w-4` = 16px, no size = the library's default, usually 24)
+   - fonts and font weights, and the border radii of buttons and cards
+   - where components live, for the icon folder (`src/components/icons` if there's a `src/components`)
+
+   Also look at the UI itself if you can (screenshots, the CSS): how heavy the body text is, whether the product feels soft or technical.
 2. **One message: what you found + the gaps.** State the findings as a short list ("React + Vite + Tailwind, lucide-react in the sidebar at 16px, square UI, pixel font"), then ask the open questions from section 3, at most ~6, each with options to pick from: 2–4 that fit this project, your recommendation first, plus "decide for me". Always include **where the icons go** and, if the project can't import SVGs as components yet, say which loader you'll add (SKILL.md step 3). When the user says "decide for me", decide and say what you picked in one line.
 3. **Show the candidate preview** (section 4) and let the user pick.
-4. **Write the file.** Copy the winning candidate to `icons.yaml` at the project root (or `init --preset <winner> --dir <dir>`), then fill in the answers. Put the winning test icons in `<dir>/source/`.
+4. **Write the file.** Copy the winning candidate to `icons.yaml` at the project root, then fill in the answers. Put the winning test icons in `<dir>/source/`.
 5. **`check`** must report `✓ complete`.
 
 If a tool for asking structured questions is available (multiple-choice cards), use it; it's faster for the user than typing. Without one, write each question with a short numbered list of options so the user can answer "1, 3, 2".
@@ -50,8 +56,8 @@ dna:
 |---|---|---|
 | `product` | One line: what it is and who it's for | ask (offer your best reading) |
 | `personality` | 3 words for how it should feel; guides metaphors and the DNA | ask |
-| `sizes` | Pixel sizes icons are shown at; the render shows these | found (`scan` reads `size-4`, `size={20}`, …) |
-| `dir` | The icon folder: `source/` plus the built SVGs | ask (offer `scan`'s `suggestedDir` first) |
+| `sizes` | Pixel sizes icons are shown at; the render shows these | found (the sizes the code shows icons at) |
+| `dir` | The icon folder: `source/` plus the built SVGs | ask (offer a folder next to the components first) |
 | `avoid` | Hard nos, incl. banned metaphors | ask once |
 | `dna.style` | `outline`, `duotone` or `filled`: one per set | asked, or taken from the request ("duotone, sharp") |
 | `dna.stroke` | Stroke width in grid units; gaps are drawn for it | preset, tuned on the candidate preview |
@@ -73,9 +79,9 @@ When a value isn't the obvious one, leave the reason as a short comment on its l
 - **Stroke ≈ the text next to it.** Icons beside 14px regular text want a thinner stroke (1.5 at 24 grid) than icons beside bold UI (2+).
 - **Corners echo the UI.** Pill buttons and big card radii → squircle or larger circular radii; sharp-cornered UI → small radii, maybe miter joins.
 - **Personality → caps/joins.** Friendly, calm, playful → round caps and joins. Precise, technical, serious → square/butt caps, miter joins, small radii.
-- **Pixel look** (pixel font, retro UI): `pixel: true`, a small grid (12 or 16 icon pixels), stroke fixed at 1, sharp corners, square caps, miter joins, angles `[0, 90]`, and `sizes` at whole multiples of the grid (a 12 grid at 24px makes every icon pixel 2×2 screen pixels). Pick the grid so one multiple matches the size the UI needs.
+- **Pixel look** (pixel font, retro UI): start from `pixel`: `pixel: true`, a small grid (12 or 16 icon pixels), stroke fixed at 1, sharp corners, square caps, miter joins, angles `[0, 90]`, and `sizes` at whole multiples of the grid (a 12 grid at 24px makes every icon pixel 2×2 screen pixels). Pick the grid so one multiple matches the size the UI needs.
 - **Small sizes → less detail.** If icons are mostly 16px, set `detail` to `minimal`/`low`, and keep `minGap` ≥ 2.
-- **Chunky sets** (kids, games, bold consumer apps): start from `chunky`. A heavy stroke needs smaller keylines to keep padding, and leaves little room inside shapes.
+- **Heavy strokes** (kids, games, bold consumer apps): raise the stroke on `plain` or `soft` and shrink the keylines by the extra half-stroke to keep the padding. A heavy stroke leaves little room inside shapes, so keep icons to a few bold pieces.
 - **Stroke costs detail.** Every gap is sized for it (`stroke + minGap` between centrelines), so a heavier stroke leaves less room inside every icon.
 - **Style.** Outline is the safe default. Duotone suits friendly, illustrative products. Filled suits bold, small, high-contrast UI, and needs silhouettes that read on their own.
 
@@ -87,7 +93,7 @@ Ask about feel and use, not design terms. The options below are examples: write 
 |---|---|---|
 | "What is the product, and who is it for?" | Your best reading from the README / package.json as option 1 ("A reading tracker for book clubs?"), then "something else" | `product` |
 | "How should the icons feel?" | calm & precise / friendly & soft / bold & playful / serious & technical (the one that matches the UI first) | `personality` → caps, joins, corners |
-| "Where should the icon files live?" | `scan`'s `suggestedDir` / one or two other folders that fit the layout (`src/icons`, `src/assets/icons`) | `dir` |
+| "Where should the icon files live?" | a folder next to the components (`src/components/icons`) / one or two other folders that fit the layout (`src/icons`, `src/assets/icons`) | `dir` |
 | "Which look?" (skip if the request already says) | outline / duotone (outline + soft tint) / filled (solid shapes) | `dna.style` |
 | "Anything icons should never show?" | nothing special / no text or letters inside icons / no hands or people / no money symbols (multi-select) | `avoid` |
 
@@ -99,7 +105,7 @@ The user picks a look by seeing the icons in their own UI, not on a grid.
 
 **Which icons.** 4–6 from the icons this request is for (the sidebar's items, the tab bar's), chosen to differ as much as possible: a round one, a square one, a tall or wide one, the most detailed one, and the product-specific concept. If the request doesn't name icons yet, use house, search, settings, user, file and one product-specific concept.
 
-**Candidates.** Make 2–3 candidate DNAs that differ in one or two things the user will feel (stroke weight and corner family are the big ones; caps/joins next). All share the chosen `style`. Start from presets: `friendly`, `chunky`, `precise`. Keep candidates outside the project (a temp folder): `init --preset <p> --style <style> --dir <dir> --out <tmp>/candidate-a.yaml` per candidate, with its sources in `<tmp>/candidate-a/`. Draw the icons **once**, with gaps sized for the heaviest candidate stroke, and only re-run the `shape` helper with each candidate's `--family`/radius. Check each candidate yourself with `render`/`sheet --config <tmp>/candidate-a.yaml --source <tmp>/candidate-a` before the user sees anything.
+**Candidates.** Make 2–3 candidate DNAs that differ in one or two things the user will feel (stroke weight and corner family are the big ones; caps/joins next). All share the chosen `style`. Start from the presets in `assets/presets.json`: `pixel` (retro bitmap), `plain` (neutral, even weight), `soft` (light stroke, wide smooth corners), `crisp` (thin, hard corners, square ends). Only use a preset whose `styles` list has the chosen `style`, and read its `notes`. Keep candidates outside the project (a temp folder): write `<tmp>/candidate-a.yaml` per candidate with the fields from section 2, `dna` copied from the preset plus the chosen `style`, and its sources in `<tmp>/candidate-a/`. Draw the icons **once**, with gaps sized for the heaviest candidate stroke, and only re-run the `shape` helper with each candidate's `--family`/radius. Check each candidate yourself with `render`/`sheet --config <tmp>/candidate-a.yaml --source <tmp>/candidate-a` before the user sees anything.
 
 **The page.** Build a template of the UI the icons go into and run `preview <template> --candidates <tmp>/candidate-a.yaml,<tmp>/candidate-b.yaml --open`; see "The preview page" in `review.md`. Ask which one (recommendation first; "A's corners with B's weight" is a fine answer), and adjust and re-run until they're happy. The winner's sources become the first icons in `<dir>/source/`.
 

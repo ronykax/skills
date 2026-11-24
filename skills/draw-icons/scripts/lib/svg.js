@@ -11,10 +11,8 @@ const GEOMETRY_ATTRS = {
   ellipse: ['cx', 'cy', 'rx', 'ry'],
   rect: ['x', 'y', 'width', 'height', 'rx', 'ry'],
 };
-const ROLE_ATTRS = ['data-role'];
-
 export function allowedAttrs(tag) {
-  return [...(GEOMETRY_ATTRS[tag] || []), ...ROLE_ATTRS];
+  return [...(GEOMETRY_ATTRS[tag] || []), 'data-role'];
 }
 
 function parseAttrs(s) {

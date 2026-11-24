@@ -14,7 +14,7 @@ export function styleOf(src, dna) {
 export function compileSvg(src, dna, opts = {}) {
   const { color = 'currentColor' } = opts;
   const style = opts.style || styleOf(src, dna);
-  const stroke = opts.stroke ?? dna.stroke;
+  const stroke = dna.stroke;
   const grid = dna.grid || 24;
   const els = src.elements;
   const sil = els.filter((e) => role(e) === 'silhouette');

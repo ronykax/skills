@@ -146,7 +146,7 @@ function arcSeg(from, rx, ry, rotDeg, large, sweep, to) {
   return { type: 'A', from, to, rx, ry, phi, cx, cy, t1, dt, large, sweep };
 }
 
-export function pointAt(seg, t) {
+function pointAt(seg, t) {
   const [x0, y0] = seg.from;
   switch (seg.type) {
     case 'L': return [x0 + (seg.to[0] - x0) * t, y0 + (seg.to[1] - y0) * t];

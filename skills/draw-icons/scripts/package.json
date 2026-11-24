@@ -2,7 +2,7 @@
   "name": "draw-icons",
   "private": true,
   "type": "module",
-  "description": "CLI for the draw-icons skill: scan, init, check, shape, lint, render, sheet, build.",
+  "description": "CLI for the draw-icons skill: check, shape, lint, render, sheet, preview, build.",
   "bin": {
     "icons": "./icons.js"
   },

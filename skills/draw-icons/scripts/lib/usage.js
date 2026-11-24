@@ -1,9 +1,26 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { listSources } from './source.js';
-import { walk } from './scan.js';
 
+const SKIP = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.nuxt', '.svelte-kit', '.output', 'out', 'coverage', '.turbo', '.vercel', 'vendor', 'Pods', '.cache']);
 const CODE = /\.(tsx?|jsx?|mjs|cjs|vue|svelte|astro|mdx|html)$/;
+
+function walk(root, limit = 6000) {
+  const files = [];
+  const stack = [root];
+  while (stack.length && files.length < limit) {
+    const dir = stack.pop();
+    let ents = [];
+    try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
+    for (const e of ents) {
+      if (e.name.startsWith('.') && e.name !== '.storybook') continue;
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) { if (!SKIP.has(e.name)) stack.push(p); }
+      else files.push(p);
+    }
+  }
+  return files;
+}
 
 function sizeOf(attrs) {
   const px = [];
