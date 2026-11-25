@@ -15,3 +15,7 @@ You can add any of these skills using the [`skills`](https://skills.sh) CLI:
 ```bash
 npx skills add ronykax/skills
 ```
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE). You're free to use, modify, and share these skills, but you must keep the [NOTICE](NOTICE) file and credit me as the original author, and mark any files you change.
