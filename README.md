@@ -16,6 +16,8 @@ You can add any of these skills using the [`skills`](https://skills.sh) CLI:
 npx skills add ronykax/skills
 ```
 
-## License
+## Sponsors
 
-Licensed under the [Apache License 2.0](LICENSE). You're free to use, modify, and share these skills, but you must keep the [NOTICE](NOTICE) file and credit me as the original author, and mark any files you change.
+Sponsor spots are open. Companies and individuals who sponsor this project get their logo featured here.
+
+[Become a sponsor](https://github.com/sponsors/ronykax)
