@@ -4,8 +4,8 @@ These are my [Agent Skills](https://agentskills.io), a standardized way to give 
 
 | Name | Summary |
 | :- | :- |
-| [`shadcn-theme`](/skills/shadcn-theme/) | Generate [shadcn/ui](https://shadcn.com/ui) themes as OKLCH CSS tokens. |
-| [`draw-icons`](/skills/draw-icons/) | High-quality icons that match your product's vibe. |
+| [`shadcn-theme`](https://skills.sh/ronykax/skills/shadcn-theme) | Generate [shadcn/ui](https://shadcn.com/ui) themes as OKLCH CSS tokens. |
+| [`draw-icons`](https://skills.ronykax.com/draw-icons) | High-quality icons that match your product's vibe. |
 | `create-content` | Content factory for carousels and Hyperframes videos. |
 
 ## Installation
